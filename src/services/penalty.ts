@@ -14,30 +14,20 @@ export const applyNoShowPenalty = async (reservationId: string) => {
 
     const reservationData = reservationSnap.data();
 
-    // 이미 노쇼 처리된 경우
+    // 이미 노쇼 처리된 경우 중복 처리하지 않음
     if (reservationData.status === "noshow") {
       return;
     }
 
-    const userRef = doc(db, "users", reservationData.consumerId);
-    const userSnap = await transaction.get(userRef);
-
-    if (!userSnap.exists()) {
-      throw new Error("사용자를 찾을 수 없습니다.");
-    }
-
-    const userData = userSnap.data();
-    const currentNoShow = userData.noShowCount ?? 0;
-    const currentScore = userData.reputationScore ?? 100;
-
+    /*
+     * 평판과 노쇼 이력은 UserReputation 스마트 컨트랙트를
+     * 기준 데이터로 사용한다.
+     *
+     * Firebase에서는 예약 상태만 관리한다.
+     */
     transaction.update(reservationRef, {
       status: "noshow",
       verificationEnabled: false,
-    });
-
-    transaction.update(userRef, {
-      noShowCount: currentNoShow + 1,
-      reputationScore: Math.max(0, currentScore - 10),
     });
   });
 };

@@ -11,16 +11,27 @@ contract UserReputation {
 
     address public admin;
 
+    // 기존 평판 반영 비율: 80%
+    uint256 public constant ALPHA = 80;
+    uint256 public constant SCALE = 100;
+
     mapping(address => UserInfo) public users;
     mapping(address => bool) public authorizedUpdaters;
 
     event UserRegistered(address indexed user, string name);
     event UserRewarded(address indexed user, uint256 reputation);
-    event NoShowRecorded(address indexed user, uint256 reputation, uint256 noShowCount);
+    event NoShowRecorded(
+        address indexed user,
+        uint256 reputation,
+        uint256 noShowCount
+    );
     event AuthorizedUpdaterChanged(address indexed updater, bool allowed);
 
     modifier onlyAdminOrUpdater() {
-        require(msg.sender == admin || authorizedUpdaters[msg.sender], "not allowed");
+        require(
+            msg.sender == admin || authorizedUpdaters[msg.sender],
+            "not allowed"
+        );
         _;
     }
 
@@ -41,7 +52,10 @@ contract UserReputation {
         emit UserRegistered(msg.sender, _name);
     }
 
-    function setAuthorizedUpdater(address _updater, bool _allowed) external {
+    function setAuthorizedUpdater(
+        address _updater,
+        bool _allowed
+    ) external {
         require(msg.sender == admin, "not admin");
         require(_updater != address(0), "invalid updater");
 
@@ -50,29 +64,55 @@ contract UserReputation {
         emit AuthorizedUpdaterChanged(_updater, _allowed);
     }
 
-    function rewardUser(address _user) external onlyAdminOrUpdater {
+    // 정상 예약 이행
+    function rewardUser(
+        address _user
+    ) external onlyAdminOrUpdater {
         require(users[_user].isRegistered, "user not registered");
 
-        users[_user].reputation += 5;
+        _updateReputation(_user, 100);
 
-        emit UserRewarded(_user, users[_user].reputation);
+        emit UserRewarded(
+            _user,
+            users[_user].reputation
+        );
     }
 
-    function recordNoShow(address _user) external onlyAdminOrUpdater {
+    // 노쇼 발생
+    function recordNoShow(
+        address _user
+    ) external onlyAdminOrUpdater {
         require(users[_user].isRegistered, "user not registered");
 
         users[_user].noShowCount += 1;
 
-        if (users[_user].reputation >= 10) {
-            users[_user].reputation -= 10;
-        } else {
-            users[_user].reputation = 0;
-        }
+        _updateReputation(_user, 0);
 
-        emit NoShowRecorded(_user, users[_user].reputation, users[_user].noShowCount);
+        emit NoShowRecorded(
+            _user,
+            users[_user].reputation,
+            users[_user].noShowCount
+        );
     }
 
-    function getUser(address _user)
+    // R(t+1) = alpha * R(t) + (1-alpha) * B(t)
+    function _updateReputation(
+        address _user,
+        uint256 _behaviorScore
+    ) private {
+        uint256 currentReputation =
+            users[_user].reputation;
+
+        users[_user].reputation =
+            (
+                currentReputation * ALPHA +
+                _behaviorScore * (SCALE - ALPHA)
+            ) / SCALE;
+    }
+
+    function getUser(
+        address _user
+    )
         external
         view
         returns (
@@ -84,6 +124,11 @@ contract UserReputation {
     {
         UserInfo memory user = users[_user];
 
-        return (user.name, user.reputation, user.noShowCount, user.isRegistered);
+        return (
+            user.name,
+            user.reputation,
+            user.noShowCount,
+            user.isRegistered
+        );
     }
 }
